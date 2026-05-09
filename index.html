@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Frontier Model Timeline</title>
+    <meta name="description" content="Interactive dark-themed timeline of AI model score trajectories across chat, image, and video." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
+    <script src="./data/site-data.js"></script>
+  </head>
+  <body>
+    <div class="bg-orb orb-1"></div>
+    <div class="bg-orb orb-2"></div>
+    <div class="grid-overlay"></div>
+
+    <main class="shell">
+      <section class="hero glass">
+        <div class="hero-copy">
+          <span class="eyebrow">AI MODEL EVOLUTION</span>
+          <h1>Frontier Model Timeline</h1>
+          <p>
+            A dark, interactive visual history of mainstream AI model families across
+            <strong>Chat</strong>, <strong>Image</strong>, and <strong>Video</strong>.
+          </p>
+        </div>
+        <div class="hero-stats" id="summary-cards"></div>
+      </section>
+
+      <section class="controls glass">
+        <div class="tabs" id="tabs"></div>
+        <div class="meta-row">
+          <div>
+            <div class="meta-label">Metric</div>
+            <div class="meta-value" id="metric-label">-</div>
+          </div>
+          <div>
+            <div class="meta-label">Timeline</div>
+            <div class="meta-value">Earliest tracked release → latest tracked release</div>
+          </div>
+          <div>
+            <div class="meta-label">Last updated</div>
+            <div class="meta-value" id="last-updated">-</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="chart-panel glass">
+        <div id="app-status" style="display:none;margin-bottom:14px;padding:12px 14px;border-radius:14px;background:rgba(251,113,133,.12);border:1px solid rgba(251,113,133,.25);color:#ffd7df"></div>
+        <div class="panel-head">
+          <div>
+            <h2 id="panel-title">CHAT</h2>
+            <p id="panel-description"></p>
+          </div>
+          <div class="legend-hint">Click legend items to show/hide lines</div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="timelineChart"></canvas>
+        </div>
+        <div id="milestone-strip" style="display:none;margin-top:14px;padding:14px;border-radius:16px;background:rgba(124,156,255,.08);border:1px solid rgba(124,156,255,.18)"></div>
+      </section>
+
+      <section class="table-panel glass">
+        <div class="panel-head compact">
+          <h3>Tracked release points</h3>
+          <span class="legend-hint">Each row is one scored release node in its family curve.</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Series</th>
+                <th>Model</th>
+                <th>Date</th>
+                <th>Score</th>
+                <th>Source</th>
+              </tr>
+            </thead>
+            <tbody id="data-table"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="table-panel glass">
+        <div class="panel-head compact">
+          <h3>Arena.ai live modality ranking</h3>
+          <span class="legend-hint">Deep-parsed from arena.ai leaderboard hydration data embedded in the page.</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Model</th>
+                <th>Organization</th>
+                <th>Modality</th>
+              </tr>
+            </thead>
+            <tbody id="arena-ranking-table"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="table-panel glass">
+        <div class="panel-head compact">
+          <h3>Arena.ai reconstructed leaderboard plots</h3>
+          <span class="legend-hint">Rebuilt from the same hydration payload arena.ai uses for its 2D scoring views.</span>
+        </div>
+        <div class="plot-grid">
+          <div class="mini-panel">
+            <h4>Average win rate</h4>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Rank</th><th>Model</th><th>Win rate</th></tr>
+                </thead>
+                <tbody id="arena-winrate-table"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="mini-panel">
+            <h4>Bootstrap Elo rating</h4>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Rank</th><th>Model</th><th>Elo</th><th>CI</th></tr>
+                </thead>
+                <tbody id="arena-elo-table"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="heatmap-wrap">
+          <div class="heatmap-title">Win fraction heatmap</div>
+          <div id="arena-heatmap" class="heatmap"></div>
+        </div>
+      </section>
+
+      <section class="footer-panels">
+        <article class="glass note-card">
+          <h3>Method</h3>
+          <p>
+            Each company is reduced to a single evolving family line. When a new flagship or representative upgrade appears,
+            that release point becomes the next node on the line.
+          </p>
+        </article>
+        <article class="glass note-card">
+          <h3>Data caveat</h3>
+          <p>
+            This version uses a curated normalized trajectory dataset so each family line stays continuous from an early public version
+            to later representative upgrades. Scores should be read as modality-specific comparison indices, not mixed across tabs.
+          </p>
+        </article>
+        <article class="glass note-card">
+          <h3>Sources</h3>
+          <ul id="source-list"></ul>
+        </article>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,106 @@
+{
+  "project": {
+    "name": "Frontier Model Timeline",
+    "description": "A GitHub-deployable dark-themed interactive website visualizing score trajectories of mainstream AI chat, image, and video models over time.",
+    "timezone": "Asia/Shanghai",
+    "refresh": "daily"
+  },
+  "metrics": {
+    "chat": {
+      "label": "Artificial Analysis Intelligence Index",
+      "source": "https://artificialanalysis.ai/leaderboards/models",
+      "notes": "Use a single unified intelligence score as the y-axis for chat models."
+    },
+    "image": {
+      "label": "Artificial Analysis Image Arena Quality Elo",
+      "source": "https://artificialanalysis.ai/image/models",
+      "notes": "Use image arena quality Elo as the y-axis for image models."
+    },
+    "video": {
+      "label": "Artificial Analysis Text-to-Video Elo",
+      "source": "https://artificialanalysis.ai/video/leaderboard/text-to-video",
+      "notes": "Use text-to-video Elo as the y-axis for video models."
+    }
+  },
+  "ui": {
+    "theme": "dark",
+    "style": ["modern", "high-end", "subtle glassmorphism", "animated", "interactive"],
+    "background": "deep dark",
+    "text": "light",
+    "interactions": [
+      "animated tab switching",
+      "hover tooltips",
+      "legend toggle",
+      "line highlight on hover",
+      "responsive layout",
+      "animated counters/cards"
+    ]
+  },
+  "tabs": [
+    {
+      "id": "chat",
+      "label": "CHAT",
+      "chartType": "multi-line time series",
+      "xAxis": "date",
+      "xStart": "2022-11-30",
+      "xEnd": "now",
+      "yAxis": "Artificial Analysis Intelligence Index",
+      "series": [
+        "GPT",
+        "CLAUDE OPUS",
+        "GROK",
+        "GEMINI",
+        "META AI",
+        "QWEN",
+        "KIMI",
+        "MINIMAX",
+        "DEEPSEEK",
+        "GLM",
+        "MIMO"
+      ]
+    },
+    {
+      "id": "image",
+      "label": "IMAGE",
+      "chartType": "multi-line time series",
+      "xAxis": "date",
+      "xStart": "2022-11-30",
+      "xEnd": "now",
+      "yAxis": "Artificial Analysis Image Arena Quality Elo",
+      "series": [
+        "DALL-E / GPT IMAGES",
+        "GROK IMAGE",
+        "GEMINI-IMAGEN / NANO BANANA",
+        "LEONARDO AI",
+        "MIDJOURNEY",
+        "FLUX",
+        "SEEDREAM"
+      ]
+    },
+    {
+      "id": "video",
+      "label": "VIDEO",
+      "chartType": "multi-line time series",
+      "xAxis": "date",
+      "xStart": "2022-11-30",
+      "xEnd": "now",
+      "yAxis": "Artificial Analysis Text-to-Video Elo",
+      "series": [
+        "SEEDANCE",
+        "WAN",
+        "GOOGLE VEO",
+        "SORA",
+        "KLING"
+      ]
+    }
+  ],
+  "requirements": {
+    "deployableToGitHub": true,
+    "githubPages": true,
+    "dailyAutoRefresh": true,
+    "storeSnapshots": true,
+    "showSources": true,
+    "includeDisclaimer": true,
+    "gracefulMissingData": true
+  }
+}

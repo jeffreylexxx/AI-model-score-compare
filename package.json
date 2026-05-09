@@ -1,0 +1,12 @@
+{
+  "name": "frontier-model-timeline",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/update-data.mjs",
+    "build:data": "node scripts/update-data.mjs",
+    "refresh:live": "node scripts/refresh-live-data.mjs && node scripts/update-data.mjs",
+    "refresh:cache": "node scripts/refresh-live-data.mjs --from-cache && node scripts/update-data.mjs"
+  }
+}
