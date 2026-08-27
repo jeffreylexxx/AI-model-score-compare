@@ -1,210 +1,242 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import https from 'node:https';
 import path from 'node:path';
 
 const root = path.resolve(process.cwd());
 const seedPath = path.join(root, 'data', 'seed-data.json');
-const cachePath = path.join(root, 'data', 'arena-cache.json');
 
-const pages = {
+const sources = {
   chat: {
-    url: 'https://arena.ai/leaderboard/text',
-    sourceLabel: 'arena.ai text leaderboard daily check',
-    patterns: [
-      ['GPT', /\b(gpt|chatgpt|openai|o\d)\b/i],
-      ['CLAUDE OPUS', /\bclaude[-\s_]?opus\b/i],
-      ['GEMINI', /\bgemini\b/i],
-      ['GROK', /\bgrok\b/i],
-      ['META AI', /\b(llama|meta|muse)\b/i],
-      ['QWEN', /\bqwen\b/i],
-      ['KIMI', /\bkimi\b/i],
-      ['MINIMAX', /\b(minimax|hailuo|abab)\b/i],
-      ['DEEPSEEK', /\bdeepseek\b/i],
-      ['GLM', /\bglm\b/i],
-      ['MIMO', /\bmimo\b/i]
-    ]
+    name: 'Artificial Analysis LLM Leaderboard',
+    url: 'https://artificialanalysis.ai/leaderboards/models',
+    metric: 'Artificial Analysis Intelligence Index',
+    minimumRows: 50
   },
   image: {
-    url: 'https://arena.ai/leaderboard/text-to-image',
-    sourceLabel: 'arena.ai text-to-image leaderboard daily check',
-    patterns: [
-      ['DALL-E / GPT IMAGES', /\b(dall[-\s]?e|gpt[-\s_]?image|openai image)\b/i],
-      ['GROK IMAGE', /\bgrok.*image|grok-imagine-image/i],
-      ['GEMINI-IMAGEN / NANO BANANA', /\b(gemini.*image|imagen|nano[-\s]?banana)\b/i],
-      ['LEONARDO AI', /\bleonardo\b/i],
-      ['MIDJOURNEY', /\bmidjourney\b|\bmj[-\s]?v?\d/i],
-      ['FLUX', /\bflux\b/i],
-      ['SEEDREAM', /\bseedream\b/i]
-    ]
+    name: 'Artificial Analysis Text-to-Image Leaderboard',
+    url: 'https://artificialanalysis.ai/image/leaderboard/text-to-image',
+    metric: 'Artificial Analysis Text-to-Image Elo',
+    minimumRows: 20
   },
   video: {
-    url: 'https://arena.ai/leaderboard/text-to-video',
-    sourceLabel: 'arena.ai text-to-video leaderboard daily check',
-    patterns: [
-      ['SEEDANCE', /\b(seedance|dreamina)\b/i],
-      ['WAN', /\bwan\d/i],
-      ['GOOGLE VEO', /\bveo\b/i],
-      ['SORA', /\bsora\b/i],
-      ['KLING', /\bkling\b/i],
-      ['PIKA AI', /\bpika\b/i],
-      ['LUMA LABS', /\b(luma|ray)\b/i]
-    ]
+    name: 'Artificial Analysis Text-to-Video Leaderboard (with audio)',
+    url: 'https://artificialanalysis.ai/video/leaderboard/text-to-video',
+    metric: 'Artificial Analysis Text-to-Video Elo (with audio)',
+    minimumRows: 10
   }
 };
 
-function fetchText(url) {
+function fetchText(url, redirects = 0) {
   return new Promise((resolve, reject) => {
-    const req = https.get(url, { headers: { 'user-agent': 'Mozilla/5.0' } }, res => {
-      if (res.statusCode && res.statusCode >= 400) {
-        reject(new Error(`${url} returned HTTP ${res.statusCode}`));
-        res.resume();
-        return;
+    const request = https.get(url, {
+      headers: {
+        accept: 'text/html,application/xhtml+xml',
+        'accept-language': 'en-US,en;q=0.9',
+        'user-agent': 'Mozilla/5.0 (compatible; FrontierModelTimeline/2.0; +https://github.com/jeffreylexxx/AI-model-score-compare)'
       }
-      let data = '';
-      res.setEncoding('utf8');
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => resolve(data));
+    }, response => {
+      if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+        response.resume();
+        if (redirects >= 5) return reject(new Error(`Too many redirects for ${url}`));
+        return resolve(fetchText(new URL(response.headers.location, url).href, redirects + 1));
+      }
+      if (response.statusCode !== 200) {
+        response.resume();
+        return reject(new Error(`${url} returned HTTP ${response.statusCode}`));
+      }
+      let body = '';
+      response.setEncoding('utf8');
+      response.on('data', chunk => body += chunk);
+      response.on('end', () => resolve(body));
+      response.on('error', reject);
     });
-    req.on('error', reject);
-    req.setTimeout(30000, () => req.destroy(new Error(`${url} timed out`)));
+    request.setTimeout(45000, () => request.destroy(new Error(`${url} timed out`)));
+    request.on('error', reject);
   });
 }
 
-function extractFlightText(html) {
-  const re = /self\.__next_f\.push\(\[(\d+),("(?:[^"\\]|\\.)*")\]\)<\/script>/g;
-  let match;
-  let joined = '';
-  while ((match = re.exec(html)) !== null) {
-    if (match[1] === '1') joined += JSON.parse(match[2]);
+async function fetchWithRetry(url, attempts = 3) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await fetchText(url);
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) await new Promise(resolve => setTimeout(resolve, attempt * 1500));
+    }
   }
-  if (!joined) throw new Error('No Next.js flight text found');
-  return joined;
+  throw lastError;
 }
 
-function extractJsonArray(text, key) {
-  const keyPos = text.indexOf(key);
-  if (keyPos < 0) throw new Error(`Key not found: ${key}`);
-  const from = text.indexOf('[', keyPos);
-  if (from < 0) throw new Error(`Array start not found: ${key}`);
+function extractFlightText(html) {
+  const expression = /self\.__next_f\.push\(\[(\d+),("(?:[^"\\]|\\.)*")\]\)<\/script>/g;
+  let flight = '';
+  for (const match of html.matchAll(expression)) {
+    if (match[1] === '1') flight += JSON.parse(match[2]);
+  }
+  if (!flight) throw new Error('Artificial Analysis Next.js data payload was not found');
+  return flight;
+}
 
+function extractBracketed(text, start, open = '[', close = ']') {
+  if (text[start] !== open) throw new Error(`Expected ${open} at offset ${start}`);
   let depth = 0;
-  let end = -1;
   let inString = false;
   let escaped = false;
-  for (let i = from; i < text.length; i++) {
-    const ch = text[i];
+  for (let index = start; index < text.length; index += 1) {
+    const character = text[index];
     if (inString) {
       if (escaped) escaped = false;
-      else if (ch === '\\') escaped = true;
-      else if (ch === '"') inString = false;
+      else if (character === '\\') escaped = true;
+      else if (character === '"') inString = false;
       continue;
     }
-    if (ch === '"') inString = true;
-    else if (ch === '[') depth++;
-    else if (ch === ']') {
-      depth--;
-      if (depth === 0) {
-        end = i;
-        break;
-      }
+    if (character === '"') inString = true;
+    else if (character === open) depth += 1;
+    else if (character === close) {
+      depth -= 1;
+      if (depth === 0) return text.slice(start, index + 1);
     }
   }
-  if (end < 0) throw new Error(`Array end not found: ${key}`);
-  return JSON.parse(text.slice(from, end + 1));
+  throw new Error(`Unterminated ${open}${close} data segment`);
 }
 
-function ratingsFromPlots(plots) {
-  const elo = plots.find(plot => plot.type === 'bootstrap_elo_rating');
-  return (elo?.data?.modelRatings || [])
-    .filter(row => row?.modelDisplayName && Number.isFinite(row.rating))
-    .map(row => ({
-      model: row.modelDisplayName,
-      score: Math.round(row.rating)
+function parseChat(flight) {
+  const scorePosition = flight.indexOf('"intelligenceIndex":');
+  const markerPosition = flight.lastIndexOf('"models":[', scorePosition);
+  if (scorePosition < 0 || markerPosition < 0) throw new Error('LLM leaderboard model array was not found');
+  const arrayStart = flight.indexOf('[', markerPosition);
+  const rawModels = JSON.parse(extractBracketed(flight, arrayStart));
+  return rawModels
+    .filter(model => model?.id && model?.name && Number.isFinite(model.intelligenceIndex) && !model.intelligenceIndexIsEstimated)
+    .sort((a, b) => b.intelligenceIndex - a.intelligenceIndex || a.name.localeCompare(b.name))
+    .map((model, index) => ({
+      id: model.id,
+      name: model.name,
+      creator: model.modelCreatorName || 'Unknown',
+      creatorSlug: model.modelCreatorSlug || null,
+      releaseDate: model.releaseDate || null,
+      score: model.intelligenceIndex,
+      rank: index + 1,
+      isCurrent: !model.deprecated,
+      isReasoning: Boolean(model.isReasoning),
+      isEstimated: false,
+      details: model
     }));
 }
 
-async function loadArenaPage(tab, info, options) {
-  if (options.fromCache) {
-    const cache = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
-    return cache.pages?.[tab]?.plots || [];
+function parseMedia(flight) {
+  const firstRow = flight.indexOf('{"formatted":{"rank":1,"elo"');
+  if (firstRow < 0) throw new Error('Media leaderboard rows were not found');
+  const arrayStart = flight.lastIndexOf('[', firstRow);
+  const rows = JSON.parse(extractBracketed(flight, arrayStart));
+  return rows
+    .map(row => row?.values)
+    .filter(model => model?.id && model?.name && Number.isFinite(model.elo))
+    .sort((a, b) => b.elo - a.elo || a.name.localeCompare(b.name))
+    .map((model, index) => ({
+      id: model.id,
+      name: model.name,
+      creator: model.creator?.name || 'Unknown',
+      creatorSlug: model.creator?.id || null,
+      releaseDate: model.released || null,
+      score: model.elo,
+      rank: index + 1,
+      isCurrent: model.isCurrent !== false,
+      appearances: model.appearances ?? null,
+      confidenceInterval: Number.isFinite(model.ciLower) && Number.isFinite(model.ciUpper)
+        ? { lower: model.ciLower, upper: model.ciUpper, delta: model.ciDelta ?? null }
+        : null,
+      price: model.pricePer1kImages ?? model.pricePerMinute ?? null,
+      details: model
+    }));
+}
+
+function validateCategory(tab, models) {
+  const { minimumRows } = sources[tab];
+  if (models.length < minimumRows) {
+    throw new Error(`${tab}: parsed ${models.length} rows; expected at least ${minimumRows}. Refusing to publish a partial snapshot.`);
   }
-  const html = await fetchText(info.url);
-  const flight = extractFlightText(html);
-  return extractJsonArray(flight, 'plots');
-}
-
-function findSeries(seed, tab, seriesName) {
-  return seed[tab]?.find(entry => entry.series === seriesName);
-}
-
-function normalizeName(name) {
-  return String(name).toLowerCase().replace(/[^a-z0-9]+/g, '');
-}
-
-function alreadyTracked(series, modelName) {
-  const normalized = normalizeName(modelName);
-  return series.models.some(point => normalizeName(point.model) === normalized);
-}
-
-function appendNewRatings(seed, tab, info, ratings, today) {
-  const additions = [];
-  for (const rating of ratings) {
-    const match = info.patterns.find(([, pattern]) => pattern.test(rating.model));
-    if (!match) continue;
-    const [seriesName] = match;
-    const series = findSeries(seed, tab, seriesName);
-    if (!series || alreadyTracked(series, rating.model)) continue;
-
-    const point = {
-      model: rating.model,
-      date: today,
-      score: rating.score,
-      source: `${info.sourceLabel}; fetched ${today}`
-    };
-    series.models.push(point);
-    additions.push({ tab, series: seriesName, ...point });
+  if (models.some(model => !Number.isFinite(model.score) || model.rank < 1)) {
+    throw new Error(`${tab}: invalid score or rank detected`);
   }
-  return additions;
+  if (new Set(models.map(model => model.id)).size !== models.length) {
+    throw new Error(`${tab}: duplicate model IDs detected`);
+  }
+}
+
+function digest(models) {
+  const compact = models.map(({ id, rank, score }) => [id, rank, score]);
+  return crypto.createHash('sha256').update(JSON.stringify(compact)).digest('hex').slice(0, 16);
+}
+
+function mergeHistory(previous, categories, today) {
+  const history = previous?.schemaVersion === 2 && previous.history ? previous.history : {};
+  for (const tab of Object.keys(categories)) {
+    const previousTab = history[tab] || {};
+    const nextTab = {};
+    for (const model of categories[tab].models) {
+      const points = Array.isArray(previousTab[model.id]) ? previousTab[model.id] : [];
+      const point = { date: today, rank: model.rank, score: model.score };
+      const withoutToday = points.filter(item => item?.date !== today);
+      const previousPoint = withoutToday.at(-1);
+      if (!previousPoint || previousPoint.rank !== point.rank || previousPoint.score !== point.score) {
+        withoutToday.push(point);
+      }
+      nextTab[model.id] = withoutToday;
+    }
+    history[tab] = nextTab;
+  }
+  return history;
 }
 
 async function main() {
-  const options = { fromCache: process.argv.includes('--from-cache') };
-  const seed = JSON.parse(fs.readFileSync(seedPath, 'utf8'));
-  const today = new Date().toISOString().slice(0, 10);
-  const allAdditions = [];
+  const previous = fs.existsSync(seedPath) ? JSON.parse(fs.readFileSync(seedPath, 'utf8')) : {};
+  const fetchedAt = new Date().toISOString();
+  const today = fetchedAt.slice(0, 10);
+  const categories = {};
 
-  for (const [tab, info] of Object.entries(pages)) {
-    const plots = await loadArenaPage(tab, info, options);
-    const ratings = ratingsFromPlots(plots);
-    const additions = appendNewRatings(seed, tab, info, ratings, today);
-    allAdditions.push(...additions);
-    console.log(`${tab}: checked ${ratings.length} ratings, added ${additions.length} points`);
+  for (const [tab, source] of Object.entries(sources)) {
+    const html = await fetchWithRetry(source.url);
+    const flight = extractFlightText(html);
+    const models = tab === 'chat' ? parseChat(flight) : parseMedia(flight);
+    validateCategory(tab, models);
+    categories[tab] = {
+      metric: source.metric,
+      source: source.url,
+      models,
+      digest: digest(models)
+    };
+    console.log(`${tab}: ${models.length} ranked models; top=${models[0].name} (${models[0].score.toFixed(2)}); digest=${categories[tab].digest}`);
   }
 
-  seed.generatedAt = new Date().toISOString();
-  seed.snapshots = [
-    ...(Array.isArray(seed.snapshots) ? seed.snapshots.filter(item => item?.date !== today) : []),
+  const snapshots = [
+    ...(previous?.schemaVersion === 2 && Array.isArray(previous.snapshots)
+      ? previous.snapshots.filter(snapshot => snapshot?.date !== today)
+      : []),
     {
       date: today,
-      note: allAdditions.length
-        ? `Daily arena.ai check added ${allAdditions.length} new scored release points.`
-        : 'Daily arena.ai check found no new mapped release points.'
+      fetchedAt,
+      counts: Object.fromEntries(Object.entries(categories).map(([tab, category]) => [tab, category.models.length])),
+      digests: Object.fromEntries(Object.entries(categories).map(([tab, category]) => [tab, category.digest]))
     }
   ];
 
-  if (allAdditions.length) {
-    fs.writeFileSync(seedPath, JSON.stringify(seed, null, 2) + '\n');
-    console.log(`Updated ${seedPath}`);
-    for (const item of allAdditions) {
-      console.log(`+ ${item.tab}/${item.series}: ${item.model} (${item.score})`);
-    }
-  } else {
-    fs.writeFileSync(seedPath, JSON.stringify(seed, null, 2) + '\n');
-    console.log('No new model points added; snapshot metadata updated.');
-  }
+  const output = {
+    schemaVersion: 2,
+    generatedAt: fetchedAt,
+    sources: Object.entries(sources).map(([id, source]) => ({ id, name: source.name, url: source.url })),
+    categories,
+    history: mergeHistory(previous, categories, today),
+    snapshots
+  };
+
+  fs.writeFileSync(seedPath, `${JSON.stringify(output, null, 2)}\n`);
+  console.log(`Wrote verified snapshot to ${seedPath}`);
 }
 
 main().catch(error => {
-  console.error(error);
+  console.error(`Live refresh failed: ${error.stack || error.message}`);
   process.exit(1);
 });
