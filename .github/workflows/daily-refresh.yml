@@ -1,0 +1,63 @@
+name: Daily verified model refresh
+
+on:
+  schedule:
+    - cron: '13 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: model-data-and-pages
+  cancel-in-progress: false
+
+jobs:
+  refresh-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Fetch and validate Chat, Image, and Video
+        run: npm run refresh:live
+
+      - name: Verify generated website data
+        run: npm run verify:data
+
+      - name: Commit verified snapshot
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/seed-data.json data/site-data.json data/site-data.js
+          if git diff --cached --quiet; then
+            echo "Verified data is unchanged; nothing to commit."
+          else
+            git commit -m "data: daily verified model refresh $(date -u +%F)"
+            git push
+          fi
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload static site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
