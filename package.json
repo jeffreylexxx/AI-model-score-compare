@@ -7,6 +7,6 @@
     "build": "node scripts/update-data.mjs",
     "build:data": "node scripts/update-data.mjs",
     "refresh:live": "node scripts/refresh-live-data.mjs && node scripts/update-data.mjs",
-    "refresh:cache": "node scripts/refresh-live-data.mjs --from-cache && node scripts/update-data.mjs"
+    "verify:data": "node -e \"const d=require('./data/site-data.json'); for (const k of ['chat','image','video']) { if (!d.categories?.[k]?.leaderboard?.length) throw new Error(k+' data missing'); } console.log('Verified', d.generatedAt);\""
   }
 }
