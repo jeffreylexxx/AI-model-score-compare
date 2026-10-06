@@ -1,6 +1,9 @@
 # Frontier Model Timeline
 
 A static GitHub Pages dashboard that refreshes verified public AI model leaderboard data every day for Chat, Image, and Video.
+DEMO LINK:
+https://jeffreylexxx.github.io/AI-model-score-compare/
+
 
 ## Live data sources
 
